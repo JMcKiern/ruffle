@@ -28,7 +28,7 @@ pub fn get_ascii<'gc>(
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let ord = activation.context.input.last_key_char().unwrap_or_default() as u32;
+    let ord = activation.context.input.last_key_ascii().unwrap_or(63) as u8;
     Ok(ord.into())
 }
 

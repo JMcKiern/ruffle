@@ -4,9 +4,16 @@ use downcast_rs::Downcast;
 pub trait InputBackend: Downcast {
     fn is_key_down(&self, key: KeyCode) -> bool;
 
+    /// Returns the key code value of the last key pressed or released. Used in Key.getCode() // TODO jmckiern:
+    /// used anywhere else?
     fn last_key_code(&self) -> KeyCode;
 
+    /// Returns the char as UTF-8 (TODO: or 16?)
     fn last_key_char(&self) -> Option<char>;
+
+    /// Returns the ASCII value of the last key pressed or released. Used in Key.getAscii() // TODO jmckiern:
+    /// used anywhere else?
+    fn last_key_ascii(&self) -> Option<u8>;
 
     fn mouse_visible(&self) -> bool;
 
@@ -41,6 +48,10 @@ impl InputBackend for NullInputBackend {
     }
 
     fn last_key_char(&self) -> Option<char> {
+        None
+    }
+
+    fn last_key_ascii(&self) -> Option<u8> {
         None
     }
 

@@ -12,6 +12,7 @@ pub struct WinitInputBackend {
     cursor_visible: bool,
     last_key: KeyCode,
     last_char: Option<char>,
+    last_ascii: Option<u8>,
     clipboard: ClipboardContext,
 }
 
@@ -19,15 +20,16 @@ impl WinitInputBackend {
     pub fn new(window: Rc<Window>) -> Self {
         Self {
             keys_down: HashSet::new(),
-            cursor_visible: true,
-            last_char: None,
-            last_key: KeyCode::Unknown,
             window,
+            cursor_visible: true,
+            last_key: KeyCode::Unknown,
+            last_char: None,
+            last_ascii: None,
             clipboard: ClipboardProvider::new().unwrap(),
         }
     }
 
-    /// Process an input event, and returns an event that should be forward to the player, if any.
+    /// Process an input event, and returns an event that should be forwarded to the player, if any.
     pub fn handle_event(&mut self, event: WindowEvent) -> Option<PlayerEvent> {
         // Allow KeyboardInput.modifiers (ModifiersChanged event not functional yet)
         #[allow(deprecated)]
@@ -185,6 +187,11 @@ impl InputBackend for WinitInputBackend {
 
     fn last_key_char(&self) -> Option<char> {
         self.last_char
+    }
+
+    // TODO: Why is this an option when last_key_code is not
+    fn last_key_ascii(&self) -> Option<u8> {
+        self.last_ascii
     }
 
     fn mouse_visible(&self) -> bool {
