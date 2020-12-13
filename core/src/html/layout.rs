@@ -7,6 +7,7 @@ use crate::font::{EvalParameters, Font};
 use crate::html::dimensions::{BoxBounds, Position, Size};
 use crate::html::text_format::{FormatSpans, TextFormat, TextSpan};
 use crate::shape_utils::DrawCommand;
+use crate::string_utils;
 use crate::tag_utils::SwfMovie;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::cmp::{max, min};
@@ -420,11 +421,15 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     fn append_text(&mut self, text: &'a str, start: usize, end: usize, span: &TextSpan) {
         if self.effective_alignment() == swf::TextAlign::Justify {
             for word in text.split(' ') {
-                let word_start = word.as_ptr() as usize - text.as_ptr() as usize;
-                let word_end = min(word_start + word.len() + 1, text.len());
+                let word_start_byte = word.as_ptr() as usize - text.as_ptr() as usize;
+                let word_start = string_utils::len_chars(&text[..word_start_byte]);
+                let word_end = min(
+                    word_start + string_utils::len_chars(word) + 1,
+                    string_utils::len_chars(text),
+                );
 
                 self.append_text_fragment(
-                    text.get(word_start..word_end).unwrap(),
+                    string_utils::get_chars(text, word_start..word_end).unwrap(),
                     start + word_start,
                     start + word_end,
                     span,
@@ -673,10 +678,10 @@ impl<'gc> LayoutBox<'gc> {
                 let params = EvalParameters::from_span(span);
 
                 for text in span_text.split(&['\n', '\r', '\t'][..]) {
-                    let slice_start = text.as_ptr() as usize - span_text.as_ptr() as usize;
+                    let slice_start_bytes = text.as_ptr() as usize - span_text.as_ptr() as usize;
+                    let slice_start = string_utils::len_chars(&span_text[..slice_start_bytes]);
                     let delimiter = if slice_start > 0 {
-                        span_text
-                            .get(slice_start - 1..)
+                        string_utils::get_chars(span_text, slice_start - 1..)
                             .and_then(|s| s.chars().next())
                     } else {
                         None
@@ -696,7 +701,7 @@ impl<'gc> LayoutBox<'gc> {
                         let (mut width, mut offset) = layout_context.wrap_dimensions(&span);
 
                         while let Some(breakpoint) = font.wrap_line(
-                            &text[last_breakpoint..],
+                            &string_utils::slice_chars(text, last_breakpoint..),
                             params,
                             width,
                             offset,
@@ -710,7 +715,7 @@ impl<'gc> LayoutBox<'gc> {
                                 width = next_dim.0;
                                 offset = next_dim.1;
 
-                                if last_breakpoint >= text.len() {
+                                if last_breakpoint >= string_utils::len_chars(text) {
                                     break;
                                 } else {
                                     continue;
@@ -719,17 +724,20 @@ impl<'gc> LayoutBox<'gc> {
 
                             // This ensures that the space causing the line break
                             // is included in the line it broke.
-                            let next_breakpoint = min(last_breakpoint + breakpoint + 1, text.len());
+                            let next_breakpoint = min(
+                                last_breakpoint + breakpoint + 1,
+                                string_utils::len_chars(text),
+                            );
 
                             layout_context.append_text(
-                                &text[last_breakpoint..next_breakpoint],
+                                &string_utils::slice_chars(text, last_breakpoint..next_breakpoint),
                                 start + last_breakpoint,
                                 start + next_breakpoint,
                                 span,
                             );
 
                             last_breakpoint = next_breakpoint;
-                            if last_breakpoint >= text.len() {
+                            if last_breakpoint >= string_utils::len_chars(text) {
                                 break;
                             }
 
@@ -741,11 +749,11 @@ impl<'gc> LayoutBox<'gc> {
                         }
                     }
 
-                    let span_end = text.len();
+                    let span_end = string_utils::len_chars(text);
 
                     if last_breakpoint < span_end {
                         layout_context.append_text(
-                            &text[last_breakpoint..span_end],
+                            &string_utils::slice_chars(text, last_breakpoint..span_end),
                             start + last_breakpoint,
                             start + span_end,
                             span,
@@ -781,7 +789,7 @@ impl<'gc> LayoutBox<'gc> {
                 params,
                 color,
             } => Some((
-                text.get(*start..*end)?,
+                string_utils::get_chars(text, *start..*end)?,
                 &text_format,
                 *font,
                 *params,

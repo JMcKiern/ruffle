@@ -1,4 +1,73 @@
 ///! Utilities for operating on strings in SWF files.
+use std::ops::{Bound, RangeBounds};
+
+/// Gets the length of a string in chars.
+pub fn len_chars(s: &str) -> usize {
+    s.chars().count()
+}
+
+/// Converts RangeBounds to a tuple corresponding to the char positions in the string.
+fn range_to_tuple(s: &str, range: impl RangeBounds<usize>) -> (usize, usize) {
+    let start = match range.start_bound() {
+        Bound::Included(bound) | Bound::Excluded(bound) => *bound,
+        Bound::Unbounded => 0,
+    };
+    let end = match range.end_bound() {
+        Bound::Included(bound) => *bound + 1,
+        Bound::Excluded(bound) => *bound,
+        Bound::Unbounded => len_chars(&s),
+    };
+    (start, end)
+}
+
+/// Converts char range to byte range for a given string taking into account variable char size.
+fn get_byte_pos(s: &str, char_start: usize, char_end: usize) -> (usize, usize) {
+    let mut curr_char_pos: usize = 0;
+    let mut curr_byte_pos: usize = 0;
+
+    let mut byte_start: usize = 0;
+    let mut byte_end: usize = s.len();
+    let mut is_start_found = false;
+    let mut is_end_found = false;
+
+    let mut it = s.chars();
+    loop {
+        if curr_char_pos == char_start {
+            byte_start = curr_byte_pos;
+            is_start_found = true;
+        }
+        if curr_char_pos == char_end {
+            byte_end = curr_byte_pos;
+            is_end_found = true;
+        }
+
+        if is_start_found && is_end_found {
+            break;
+        }
+
+        if let Some(c) = it.next() {
+            curr_char_pos += 1;
+            curr_byte_pos += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    (byte_start, byte_end)
+}
+
+/// Get substring from char range, analogous to `str.get()`.
+pub fn get_chars(s: &str, range: impl RangeBounds<usize>) -> Option<&str> {
+    let (start, end) = range_to_tuple(s, range);
+    let (byte_start, byte_end) = get_byte_pos(s, start, end);
+    s.get(byte_start..byte_end)
+}
+
+/// Get substring from char range, analogous to `str[]`.
+pub fn slice_chars(s: &str, range: impl RangeBounds<usize>) -> &str {
+    let (start, end) = range_to_tuple(s, range);
+    let (byte_start, byte_end) = get_byte_pos(s, start, end);
+    &s[byte_start..byte_end]
+}
 
 /// Creates a `String` from an iterator of UTF-16 code units.
 /// TODO: Unpaired surrogates will get replaced with the Unicode replacement character.

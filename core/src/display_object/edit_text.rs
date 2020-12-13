@@ -5,11 +5,12 @@ use crate::backend::input::MouseCursor;
 use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
 use crate::drawing::Drawing;
-use crate::events::{ButtonKeyCode, ClipEvent, ClipEventResult, KeyCode};
+use crate::events::{ButtonKeyCode, ClipEvent, ClipEventResult, ControlCharCode, KeyCode};
 use crate::font::{round_down_to_pixel, Glyph};
 use crate::html::{BoxBounds, FormatSpans, LayoutBox, LayoutContent, TextFormat};
 use crate::prelude::*;
 use crate::shape_utils::DrawCommand;
+use crate::string_utils;
 use crate::tag_utils::SwfMovie;
 use crate::transform::Transform;
 use crate::types::{Degrees, Percent};
@@ -17,6 +18,7 @@ use crate::vminterface::Instantiator;
 use crate::xml::XMLDocument;
 use chrono::Utc;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
+use std::convert::TryFrom;
 use std::{cell::Ref, sync::Arc};
 use swf::Twips;
 
@@ -155,12 +157,22 @@ impl<'gc> EditText<'gc> {
                 .replace_with_str(context.gc_context, &text, false);
             text_spans.lower_from_html(document);
         } else {
-            text_spans.replace_text(0, text_spans.text().len(), &text, Some(&default_format));
+            text_spans.replace_text(
+                0,
+                string_utils::len_chars(text_spans.text()),
+                &text,
+                Some(&default_format),
+            );
         }
 
         if !is_multiline {
             let filtered = text_spans.text().replace("\n", "");
-            text_spans.replace_text(0, text_spans.text().len(), &filtered, Some(&default_format));
+            text_spans.replace_text(
+                0,
+                string_utils::len_chars(text_spans.text()),
+                &filtered,
+                Some(&default_format),
+            );
         }
 
         let bounds: BoundingBox = swf_tag.bounds.clone().into();
@@ -296,7 +308,7 @@ impl<'gc> EditText<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) -> Result<(), Error> {
         let mut edit_text = self.0.write(context.gc_context);
-        let len = edit_text.text_spans.text().len();
+        let len = string_utils::len_chars(edit_text.text_spans.text());
         let tf = edit_text.text_spans.default_format().clone();
 
         edit_text.text_spans.replace_text(0, len, &text, Some(&tf));
@@ -377,7 +389,7 @@ impl<'gc> EditText<'gc> {
     }
 
     pub fn text_length(self) -> usize {
-        self.0.read().text_spans.text().len()
+        string_utils::len_chars(self.0.read().text_spans.text())
     }
 
     pub fn new_text_format(self) -> TextFormat {
@@ -955,7 +967,7 @@ impl<'gc> EditText<'gc> {
     ) {
         let mut text = self.0.write(gc_context);
         if let Some(mut selection) = selection {
-            selection.clamp(text.text_spans.text().len());
+            selection.clamp(string_utils::len_chars(text.text_spans.text()));
             text.selection = Some(selection);
         } else {
             text.selection = None;
@@ -1016,53 +1028,66 @@ impl<'gc> EditText<'gc> {
 
         if let Some(selection) = self.selection() {
             let mut changed = false;
-            match character as u8 {
-                8 | 127 if !selection.is_caret() => {
-                    // Backspace or delete with multiple characters selected
-                    self.replace_text(selection.start(), selection.end(), "", context);
-                    self.set_selection(
-                        Some(TextSelection::for_position(selection.start())),
-                        context.gc_context,
-                    );
-                    changed = true;
-                }
-                8 => {
-                    // Backspace with caret
-                    if selection.start() > 0 {
-                        // Delete previous character
-                        self.replace_text(selection.start() - 1, selection.start(), "", context);
-                        self.set_selection(
-                            Some(TextSelection::for_position(selection.start() - 1)),
-                            context.gc_context,
-                        );
-                        changed = true;
+            if character.is_control() {
+                if let Ok(ctrl_char) = ControlCharCode::try_from(character as u8) {
+                    match ctrl_char as ControlCharCode {
+                        ControlCharCode::Backspace | ControlCharCode::Delete
+                            if !selection.is_caret() =>
+                        {
+                            // Backspace or delete with multiple characters selected
+                            self.replace_text(selection.start(), selection.end(), "", context);
+                            self.set_selection(
+                                Some(TextSelection::for_position(selection.start())),
+                                context.gc_context,
+                            );
+                            changed = true;
+                        }
+                        ControlCharCode::Backspace => {
+                            // Backspace with caret
+                            if selection.start() > 0 {
+                                // Delete previous character
+                                self.replace_text(
+                                    selection.start() - 1,
+                                    selection.start(),
+                                    "",
+                                    context,
+                                );
+                                self.set_selection(
+                                    Some(TextSelection::for_position(selection.start() - 1)),
+                                    context.gc_context,
+                                );
+                                changed = true;
+                            }
+                        }
+                        ControlCharCode::Delete => {
+                            // Delete with caret
+                            if selection.end() < self.text_length() {
+                                // Delete next character
+                                self.replace_text(
+                                    selection.start(),
+                                    selection.start() + 1,
+                                    "",
+                                    context,
+                                );
+                                // No need to change selection
+                                changed = true;
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                127 => {
-                    // Delete with caret
-                    if selection.end() < self.text_length() {
-                        // Delete next character
-                        self.replace_text(selection.start(), selection.start() + 1, "", context);
-                        // No need to change selection
-                        changed = true;
-                    }
-                }
-                32..=126 => {
-                    // ASCII
-                    // TODO: Make this actually good and not basic ASCII :)
-                    self.replace_text(
-                        selection.start(),
-                        selection.end(),
-                        &character.to_string(),
-                        context,
-                    );
-                    self.set_selection(
-                        Some(TextSelection::for_position(selection.start() + 1)),
-                        context.gc_context,
-                    );
-                    changed = true;
-                }
-                _ => {}
+            } else {
+                self.replace_text(
+                    selection.start(),
+                    selection.end(),
+                    &character.to_string(),
+                    context,
+                );
+                self.set_selection(
+                    Some(TextSelection::for_position(selection.start() + 1)),
+                    context.gc_context,
+                );
+                changed = true;
             }
 
             if changed {
@@ -1403,7 +1428,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
                 let mut text = self.0.write(context.gc_context);
                 let selection = text.selection;
                 if let Some(mut selection) = selection {
-                    let length = text.text_spans.text().len();
+                    let length = string_utils::len_chars(text.text_spans.text());
                     match key_code {
                         ButtonKeyCode::Left if selection.to > 0 => {
                             if context.input.is_key_down(KeyCode::Shift) {

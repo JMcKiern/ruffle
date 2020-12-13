@@ -1,6 +1,7 @@
 use crate::backend::render::{RenderBackend, ShapeHandle};
 use crate::html::TextSpan;
 use crate::prelude::*;
+use crate::string_utils;
 use crate::transform::Transform;
 use gc_arena::{Collect, Gc, MutationContext};
 
@@ -315,11 +316,12 @@ impl<'gc> Font<'gc> {
         let mut line_end = 0;
 
         for word in text.split(' ') {
-            let word_start = word.as_ptr() as usize - text.as_ptr() as usize;
-            let word_end = word_start + word.len();
+            let word_start_byte = word.as_ptr() as usize - text.as_ptr() as usize;
+            let word_start = string_utils::len_chars(&text[..word_start_byte]);
+            let word_end = word_start + string_utils::len_chars(word);
 
             let measure = self.measure(
-                text.get(word_start..word_end + 1).unwrap_or(word),
+                string_utils::get_chars(text, word_start..word_end + 1).unwrap_or(word),
                 params,
                 false,
             );
@@ -330,8 +332,11 @@ impl<'gc> Font<'gc> {
                 let mut frag_end = word_start;
                 while last_passing_breakpoint.0 < remaining_width {
                     frag_end += 1;
-                    last_passing_breakpoint =
-                        self.measure(&text[word_start..frag_end], params, false);
+                    last_passing_breakpoint = self.measure(
+                        &string_utils::slice_chars(text, word_start..frag_end),
+                        params,
+                        false,
+                    );
                 }
 
                 return Some(frag_end - 1);
@@ -342,7 +347,10 @@ impl<'gc> Font<'gc> {
             } else {
                 //Space remains for our current word, move up the word pointer.
                 line_end = word_end;
-                is_start_of_line = is_start_of_line && text[0..line_end].trim().is_empty();
+                is_start_of_line = is_start_of_line
+                    && string_utils::slice_chars(text, 0..line_end)
+                        .trim()
+                        .is_empty();
 
                 //If the additional space were to cause an overflow, then
                 //return now.

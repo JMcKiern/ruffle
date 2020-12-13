@@ -372,3 +372,13 @@ pub fn key_code_to_button_key_code(key_code: KeyCode) -> Option<ButtonKeyCode> {
     };
     Some(out)
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
+pub enum ControlCharCode {
+    // TODO: Extend this
+    Null = 0,
+    Copy = 3,
+    Backspace = 8,
+    Delete = 127,
+}

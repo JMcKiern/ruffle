@@ -1,5 +1,5 @@
 use ruffle_core::backend::input::{InputBackend, MouseCursor};
-use ruffle_core::events::KeyCode;
+use ruffle_core::events::{ControlCharCode, KeyCode};
 use ruffle_web_common::JsResult;
 use std::collections::HashSet;
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
@@ -318,8 +318,9 @@ pub fn web_key_to_codepoint(key: &str) -> Option<char> {
     } else {
         // Check for special characters.
         match key {
-            "Backspace" => Some(8 as char),
-            "Delete" => Some(127 as char),
+            // TODO: include all *reasonable* control characters Copy, Paste etc.
+            "Backspace" => Some(ControlCharCode::Backspace as u8 as char),
+            "Delete" => Some(ControlCharCode::Delete as u8 as char),
             _ => None,
         }
     }

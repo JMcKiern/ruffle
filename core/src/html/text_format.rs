@@ -4,6 +4,7 @@ use crate::avm1::activation::Activation;
 use crate::avm1::{AvmString, Object, ScriptObject, TObject, Value};
 use crate::context::UpdateContext;
 use crate::html::iterators::TextSpanIter;
+use crate::string_utils;
 use crate::tag_utils::SwfMovie;
 use crate::xml::{Step, XMLDocument, XMLName, XMLNode};
 use gc_arena::{Collect, MutationContext};
@@ -20,14 +21,14 @@ fn process_html_entity(src: &str) -> Cow<str> {
         let mut result_str = String::with_capacity(src.len());
 
         // Copy initial segment.
-        result_str.push_str(&src[0..amp_index]);
+        result_str.push_str(&string_utils::slice_chars(src, 0..amp_index));
 
-        let src = &src[amp_index..];
+        let src = &string_utils::slice_chars(src, amp_index..);
         let mut entity_start = None;
         for (i, ch) in src.char_indices() {
             if let Some(start) = entity_start {
                 if ch == ';' {
-                    let s = src[start + 1..i].to_ascii_lowercase();
+                    let s = string_utils::slice_chars(src, start + 1..i).to_ascii_lowercase();
                     match s.as_str() {
                         "amp" => result_str.push('&'),
                         "lt" => result_str.push('<'),
@@ -35,16 +36,16 @@ fn process_html_entity(src: &str) -> Cow<str> {
                         "quot" => result_str.push('"'),
                         "apos" => result_str.push('\''),
                         "nbsp" => result_str.push('\u{00A0}'),
-                        s if s.len() >= 2 && s.as_bytes()[0] == b'#' => {
+                        s if string_utils::len_chars(s) >= 2 && s.as_bytes()[0] == b'#' => {
                             // Number entity: &#nnnn; or &#xhhhh;
                             let (digits, radix) = if src.as_bytes()[1] == b'x' {
                                 // Only trailing 4 hex digits are used.
-                                let start = usize::max(s.len(), 6) - 4;
-                                (&s[start..], 16)
+                                let start = usize::max(string_utils::len_chars(s), 6) - 4;
+                                (string_utils::slice_chars(s, start..), 16)
                             } else {
                                 // Only trailing 16 digits are used.
-                                let start = usize::max(s.len(), 17) - 16;
-                                (&s[start..], 10)
+                                let start = usize::max(string_utils::len_chars(s), 17) - 16;
+                                (string_utils::slice_chars(s, start..), 10)
                             };
                             if let Ok(n) = u32::from_str_radix(digits, radix) {
                                 if let Some(c) = std::char::from_u32(n) {
@@ -52,16 +53,16 @@ fn process_html_entity(src: &str) -> Cow<str> {
                                 }
                             } else {
                                 // Invalid entity; output text as is.
-                                result_str.push_str(&src[start..i + 1]);
+                                result_str.push_str(&string_utils::slice_chars(src, start..i + 1));
                             }
                         }
                         // Invalid entity; output text as is.
-                        _ => result_str.push_str(&src[start..i + 1]),
+                        _ => result_str.push_str(&string_utils::slice_chars(src, start..i + 1)),
                     };
 
                     entity_start = None;
                 } else if ch == '&' {
-                    result_str.push_str(&src[start..i]);
+                    result_str.push_str(&string_utils::slice_chars(src, start..i));
                     entity_start = Some(i);
                 }
             } else if ch == '&' {
@@ -73,7 +74,7 @@ fn process_html_entity(src: &str) -> Cow<str> {
 
         // Output remaining text if we were in the middle of parsing an entity.
         if let Some(start) = entity_start {
-            result_str.push_str(&src[start..]);
+            result_str.push_str(&string_utils::slice_chars(src, start..));
         }
 
         Cow::Owned(result_str)
@@ -975,6 +976,7 @@ impl FormatSpans {
                 return Some(first_span_pos);
             }
 
+            // TODO: Check this
             let first_span = self.spans.get_mut(first_span_pos).unwrap();
             let mut second_span = first_span.clone();
             second_span.span_length = first_span.span_length - break_index;
@@ -1036,13 +1038,13 @@ impl FormatSpans {
             span_length += span.span_length;
         }
 
-        match span_length.cmp(&self.text.len()) {
+        match span_length.cmp(&string_utils::len_chars(&self.text)) {
             Ordering::Less => self.spans.push(TextSpan::with_length_and_format(
-                self.text.len() - span_length,
+                string_utils::len_chars(&self.text) - span_length,
                 self.default_format.clone(),
             )),
             Ordering::Greater => {
-                let mut deficiency = span_length - self.text.len();
+                let mut deficiency = span_length - string_utils::len_chars(&self.text);
                 while deficiency > 0 && !self.spans.is_empty() {
                     let removed_length = {
                         let last = self.spans.last_mut().unwrap();
@@ -1099,7 +1101,7 @@ impl FormatSpans {
         // null span at this point.
         if self.spans.is_empty() {
             self.spans.push(TextSpan::with_length_and_format(
-                self.text.len(),
+                string_utils::len_chars(&self.text),
                 self.default_format.clone(),
             ));
         }
@@ -1167,7 +1169,7 @@ impl FormatSpans {
             return;
         }
 
-        if from < self.text.len() {
+        if from < string_utils::len_chars(&self.text) {
             self.ensure_span_break_at(from);
             self.ensure_span_break_at(to);
 
@@ -1180,11 +1182,11 @@ impl FormatSpans {
             self.spans.drain(start_pos..end_pos);
             self.spans.insert(
                 start_pos,
-                TextSpan::with_length_and_format(with.len(), new_tf),
+                TextSpan::with_length_and_format(string_utils::len_chars(with), new_tf),
             );
         } else {
             self.spans.push(TextSpan::with_length_and_format(
-                with.len(),
+                string_utils::len_chars(with),
                 new_tf
                     .cloned()
                     .unwrap_or_else(|| self.default_format.clone()),
@@ -1192,7 +1194,7 @@ impl FormatSpans {
         }
 
         let mut new_string = String::new();
-        if let Some(text) = self.text.get(0..from) {
+        if let Some(text) = string_utils::get_chars(&self.text, 0..from) {
             new_string.push_str(text);
         } else {
             // `get` will fail if `from` exceeds the bounds of the text, rather
@@ -1203,7 +1205,7 @@ impl FormatSpans {
 
         new_string.push_str(with);
 
-        if let Some(text) = self.text.get(to..) {
+        if let Some(text) = string_utils::get_chars(&self.text, to..) {
             new_string.push_str(text);
         }
 
@@ -1253,7 +1255,12 @@ impl FormatSpans {
                             .node_name()
                             .eq_ignore_ascii_case("br") =>
                 {
-                    self.replace_text(self.text.len(), self.text.len(), "\n", format_stack.last());
+                    self.replace_text(
+                        string_utils::len_chars(&self.text),
+                        string_utils::len_chars(&self.text),
+                        "\n",
+                        format_stack.last(),
+                    );
                 }
                 Step::Out(node)
                     if node
@@ -1275,8 +1282,8 @@ impl FormatSpans {
                 )),
                 Step::Around(node) if node.is_text() => {
                     self.replace_text(
-                        self.text.len(),
-                        self.text.len(),
+                        string_utils::len_chars(&self.text),
+                        string_utils::len_chars(&self.text),
                         &process_html_entity(&node.node_value().unwrap()),
                         format_stack.last(),
                     );
@@ -1295,8 +1302,8 @@ impl FormatSpans {
                             .eq_ignore_ascii_case("li") =>
                 {
                     self.replace_text(
-                        self.text.len(),
-                        self.text.len(),
+                        string_utils::len_chars(&self.text),
+                        string_utils::len_chars(&self.text),
                         "\n",
                         last_successful_format.as_ref(),
                     );
@@ -1608,9 +1615,15 @@ impl FormatSpans {
                 let span_text = if last_bullet.is_some() {
                     XMLNode::new_text(mc, line, document)
                 } else {
-                    let line_start = line.as_ptr() as usize - text.as_ptr() as usize;
+                    // TODO: Check this
+                    let line_start_byte = line.as_ptr() as usize - text.as_ptr() as usize;
+                    let line_start = string_utils::len_chars(&text[..line_start_byte]);
                     let line_with_newline = if line_start > 0 {
-                        text.get(line_start - 1..line.len() + 1).unwrap_or(line)
+                        string_utils::get_chars(
+                            text,
+                            line_start - 1..string_utils::len_chars(line) + 1,
+                        )
+                        .unwrap_or(line)
                     } else {
                         line
                     };
