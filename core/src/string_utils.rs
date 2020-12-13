@@ -1598,3 +1598,72 @@ static LOWERCASE_TABLE: &[(u16, u16)] = &[
     (65337, 65369),
     (65338, 65370),
 ];
+
+#[test]
+fn test_len_chars() {
+    let s = "abcd€";
+    assert_eq!(len_chars(&s), 5);
+}
+
+#[test]
+#[allow(clippy::reversed_empty_ranges)]
+fn test_get_chars() {
+    let s1 = "asdfjkl;";
+    assert_eq!(get_chars(&s1, ..), s1.get(..));
+    assert_eq!(get_chars(&s1, ..0), s1.get(..0));
+    assert_eq!(get_chars(&s1, ..1), s1.get(..1));
+    assert_eq!(get_chars(&s1, 0..), s1.get(0..));
+    assert_eq!(get_chars(&s1, 1..), s1.get(1..));
+    assert_eq!(get_chars(&s1, 1..3), s1.get(1..3));
+    assert_eq!(get_chars(&s1, 3..2), s1.get(3..2));
+    assert_eq!(get_chars(&s1, 8..), s1.get(8..));
+    assert_eq!(get_chars(&s1, 9..), s1.get(9..));
+    assert_eq!(get_chars(&s1, ..8), s1.get(..8));
+    assert_eq!(get_chars(&s1, ..9), s1.get(..9));
+
+    let s2 = "€£asdf€£";
+    assert_eq!(get_chars(&s2, ..), Some("€£asdf€£"));
+    assert_eq!(get_chars(&s2, ..0), Some(""));
+    assert_eq!(get_chars(&s2, ..1), Some("€"));
+    assert_eq!(get_chars(&s2, 0..), Some("€£asdf€£"));
+    assert_eq!(get_chars(&s2, 1..), Some("£asdf€£"));
+    assert_eq!(get_chars(&s2, 1..3), Some("£a"));
+    assert_eq!(get_chars(&s2, 3..2), None);
+    assert_eq!(get_chars(&s2, 8..), Some(""));
+    assert_eq!(get_chars(&s2, 9..), None);
+    assert_eq!(get_chars(&s2, ..8), Some("€£asdf€£"));
+    assert_eq!(get_chars(&s2, ..9), None);
+}
+
+#[test]
+#[allow(clippy::reversed_empty_ranges)]
+fn test_slice_chars() {
+    let s1 = "asdfjkl;";
+    assert_eq!(slice_chars(&s1, ..), &s1[..]);
+    assert_eq!(slice_chars(&s1, ..0), &s1[..0]);
+    assert_eq!(slice_chars(&s1, ..1), &s1[..1]);
+    assert_eq!(slice_chars(&s1, 0..), &s1[0..]);
+    assert_eq!(slice_chars(&s1, 1..), &s1[1..]);
+    assert_eq!(slice_chars(&s1, 1..3), &s1[1..3]);
+    assert!(std::panic::catch_unwind(|| slice_chars(&s1, 3..2)).is_err());
+    assert!(std::panic::catch_unwind(|| &s1[3..2]).is_err());
+    assert_eq!(slice_chars(&s1, 8..), &s1[8..]);
+    assert!(std::panic::catch_unwind(|| slice_chars(&s1, 9..)).is_err());
+    assert!(std::panic::catch_unwind(|| &s1[9..]).is_err());
+    assert_eq!(slice_chars(&s1, ..8), &s1[..8]);
+    assert!(std::panic::catch_unwind(|| slice_chars(&s1, ..9)).is_err());
+    assert!(std::panic::catch_unwind(|| &s1[..9]).is_err());
+
+    let s2 = "€£asdf€£";
+    assert_eq!(slice_chars(&s2, ..), "€£asdf€£");
+    assert_eq!(slice_chars(&s2, ..0), "");
+    assert_eq!(slice_chars(&s2, ..1), "€");
+    assert_eq!(slice_chars(&s2, 0..), "€£asdf€£");
+    assert_eq!(slice_chars(&s2, 1..), "£asdf€£");
+    assert_eq!(slice_chars(&s2, 1..3), "£a");
+    assert!(std::panic::catch_unwind(|| slice_chars(&s2, 3..2)).is_err());
+    assert_eq!(slice_chars(&s2, 8..), "");
+    assert!(std::panic::catch_unwind(|| slice_chars(&s2, 9..)).is_err());
+    assert_eq!(slice_chars(&s2, ..8), "€£asdf€£");
+    assert!(std::panic::catch_unwind(|| slice_chars(&s2, ..9)).is_err());
+}
