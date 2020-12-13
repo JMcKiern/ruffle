@@ -26,9 +26,14 @@ fn get_byte_pos(s: &str, char_start: usize, char_end: usize) -> (usize, usize) {
     let mut curr_byte_pos: usize = 0;
 
     let mut byte_start: usize = 0;
-    let mut byte_end: usize = s.len();
+    let mut byte_end: usize = s.len() + 1;
     let mut is_start_found = false;
     let mut is_end_found = false;
+
+    if char_start > len_chars(&s) {
+        byte_start = s.len() + 1;
+        is_start_found = true;
+    }
 
     let mut it = s.chars();
     loop {
