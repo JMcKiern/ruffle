@@ -265,20 +265,6 @@ pub trait SwfRead<R: Read> {
         num.swap(3, 7);
         (&num[..]).read_f64::<LittleEndian>()
     }
-
-    fn read_c_string(&mut self) -> Result<String> {
-        let mut bytes = Vec::new();
-        loop {
-            let byte = self.read_u8()?;
-            if byte == 0 {
-                break;
-            }
-            bytes.push(byte)
-        }
-        // TODO: There is probably a better way to do this.
-        // TODO: Verify ANSI for SWF 5 and earlier.
-        String::from_utf8(bytes).map_err(|_| Error::invalid_data("Invalid string data"))
-    }
 }
 
 pub struct Reader<R: Read> {
@@ -2863,6 +2849,33 @@ impl<R: Read> Reader<R> {
         let mut debug_id = [0u8; 16];
         self.get_mut().read_exact(&mut debug_id)?;
         Ok(debug_id)
+    }
+
+    pub fn read_c_string(&mut self) -> Result<String> {
+        if self.version >= 6 {
+            let mut bytes = Vec::new();
+            loop {
+                let byte = self.read_u8()?;
+                if byte == 0 {
+                    break;
+                }
+                bytes.push(byte)
+            }
+            // TODO: There is probably a better way to do this.
+            // TODO: Verify ANSI for SWF 5 and earlier.
+            String::from_utf8(bytes).map_err(|_| Error::invalid_data("Invalid string data"))
+        } else {
+            let mut s = String::new();
+            loop {
+                let byte = self.read_u8()?;
+                if byte == 0 {
+                    break;
+                }
+                s.push(byte as char);
+            }
+            log::warn!("Returning {:?} from read_c_string", s);
+            Ok(s)
+        }
     }
 }
 
