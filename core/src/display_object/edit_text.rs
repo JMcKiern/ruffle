@@ -524,6 +524,26 @@ impl<'gc> EditText<'gc> {
         self.relayout(context);
     }
 
+    pub fn replace_selection(
+        self,
+        text: &str,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+    ) {
+        // TODO: Replace as text not HTML
+        // TODO: Check what happens in flash when you have an event listener on a key and have:
+        //  case 'A':
+        //      tf.replaceSel('asdf');
+        if let Some(selection) = self.selection() {
+            let from = selection.start();
+            let to = selection.end();
+            self.0
+                .write(context.gc_context)
+                .text_spans
+                .replace_text(from, to, text, None);
+            self.relayout(context);
+        }
+    }
+
     /// Construct a base text transform for a particular `EditText` span.
     ///
     /// This `text_transform` is separate from and relative to the base

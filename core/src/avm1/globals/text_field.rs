@@ -116,6 +116,7 @@ pub fn create_proto<'gc>(
         "getTextFormat" => get_text_format,
         "setTextFormat" => set_text_format,
         "replaceText" => replace_text,
+        "replaceSel" => replace_selection,
         "removeTextField" => remove_text_field
     );
 
@@ -242,6 +243,23 @@ fn replace_text<'gc>(
         .to_string();
 
     text_field.replace_text(from as usize, to as usize, &text, &mut activation.context);
+
+    Ok(Value::Undefined)
+}
+
+fn replace_selection<'gc>(
+    text_field: EditText<'gc>,
+    activation: &mut Activation<'_, 'gc, '_>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    let text = args
+        .get(0)
+        .cloned()
+        .unwrap_or(Value::Undefined)
+        .coerce_to_string(activation)?
+        .to_string();
+
+    text_field.replace_selection(&text, &mut activation.context);
 
     Ok(Value::Undefined)
 }
